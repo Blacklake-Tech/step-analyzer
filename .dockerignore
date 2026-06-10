@@ -1,0 +1,6 @@
+# Dockerfile 只需 AnalysisSitus.AppImage（构建时自行 --appimage-extract）。
+# 已解压的 AnalysisSitus/ 目录是本地副本，约 100MB，不进构建上下文。
+AnalysisSitus/
+.DS_Store
+**/.DS_Store
+.env

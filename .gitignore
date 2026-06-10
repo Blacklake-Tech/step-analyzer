@@ -1,0 +1,36 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+test/drawings/
+test/results/
+test/fixtures/
+
+# Virtual environments
+.venv
+.uv-cache/
+
+# Environment variables
+.env
+test/.env.eval
+
+# Langgraph cache
+.langgraph_api
+
+# step-analyzer 模板：构建用的大体积二进制不入库（Dockerfile/build 脚本仍可跟踪）
+AnalysisSitus.AppImage
+AnalysisSitus/
+
+# macOS files
+.DS_Store
+
+#IDE
+.claude/
+.codebuddy/
+.trae/
+.cursor/
+.vscode/
+.idea/
