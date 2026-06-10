@@ -1,0 +1,54 @@
+name: Mirror image to Tencent CCR
+
+# 把 ghcr.io 上的镜像直传（registry-to-registry）到腾讯云容器镜像服务 CCR 个人版。
+# 用 crane copy 流式搬运 layer，不在 runner 上落完整 docker 镜像，CCR 已有的 layer 自动跳过。
+# 在 Actions 页手动 Run workflow，填要搬运的 tag 即可。
+#
+# 需要在 repo Settings → Secrets and variables → Actions 配置：
+#   CCR_USERNAME = 100019179737
+#   CCR_PASSWORD = 腾讯云 CCR 的「访问凭证 / 登录密码」（在容器镜像服务控制台设置，不是腾讯云账号密码）
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: '要直传的 tag（逗号分隔，如：latest,main）'
+        required: true
+        default: 'latest'
+
+env:
+  SRC: ghcr.io/blacklake-tech/step-analyzer
+  DST: ccr.ccs.tencentyun.com/blacklake-tech/step-analyzer
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read    # 读 ghcr（源已公开，保留以防日后转私有）
+    steps:
+      - name: Install crane
+        run: |
+          VERSION=v0.20.2
+          curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
+            | sudo tar -xzf - -C /usr/local/bin crane
+          crane version
+
+      - name: Log in to registries
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CCR_USERNAME: ${{ secrets.CCR_USERNAME }}
+          CCR_PASSWORD: ${{ secrets.CCR_PASSWORD }}
+        run: |
+          echo "$GHCR_TOKEN"   | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "$CCR_PASSWORD" | crane auth login ccr.ccs.tencentyun.com -u "$CCR_USERNAME" --password-stdin
+
+      - name: Copy ghcr -> ccr
+        run: |
+          IFS=',' read -ra TAGS <<< "${{ github.event.inputs.tags }}"
+          for raw in "${TAGS[@]}"; do
+            tag="$(echo "$raw" | xargs)"   # 去空格
+            [ -z "$tag" ] && continue
+            echo "::group::copy ${tag}"
+            crane copy "${SRC}:${tag}" "${DST}:${tag}"
+            echo "::endgroup::"
+          done
