@@ -20,8 +20,7 @@ test/.env.eval
 # Langgraph cache
 .langgraph_api
 
-# step-analyzer 模板：构建用的大体积二进制不入库（Dockerfile/build 脚本仍可跟踪）
-AnalysisSitus.AppImage
+# step-analyzer 模板：成品 AnalysisSitus.AppImage 用 Git LFS 入库（见 .gitattributes）；构建中间目录不入库
 AnalysisSitus/
 
 # macOS files
