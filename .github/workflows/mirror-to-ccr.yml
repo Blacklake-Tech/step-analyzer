@@ -22,7 +22,7 @@ env:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 20   # 防止 crane 异常空转烧分钟
+    timeout-minutes: 60   # 首次要跨境上传整镜像(~2.5-3GB)，给足时间
     permissions:
       contents: read
       packages: read    # 读 ghcr（源已公开，保留以防日后转私有）
@@ -55,15 +55,15 @@ jobs:
             # index/attestation，会出现 PUT 成功但 docker pull not found。
             # 先解析出 linux/amd64 的单一镜像 manifest digest，只把它推到 CCR（扁平化）。
             digest="$(crane digest --platform linux/amd64 "${SRC}:${tag}" 2>/dev/null || true)"
-            # -v 打 HTTP 细日志（看卡在哪个请求）；timeout 600 防止单步空转，超时即失败并保留日志
+            # CCR 不支持从 ghcr 跨仓库 mount，首次每层都要真上传(~2.5-3GB，跨境较慢)；
+            # 不加单步 timeout，让它传完。已传完的层会持久化，重跑时自动 HEAD->200 跳过（增量续传）。
+            # crane 每传完一层会打印 "pushed blob: ..."，看这个判断进度。
             if [ -n "$digest" ]; then
               echo "flatten OCI index -> ${SRC}@${digest}"
-              timeout 600 crane -v copy "${SRC}@${digest}" "${DST}:${tag}" \
-                || { echo "::error::crane copy 超时/失败：看上方 -v 日志最后一条请求即卡点"; exit 1; }
+              crane copy "${SRC}@${digest}" "${DST}:${tag}"
             else
               echo "source 非 index，原样复制"
-              timeout 600 crane -v copy "${SRC}:${tag}" "${DST}:${tag}" \
-                || { echo "::error::crane copy 超时/失败：看上方 -v 日志最后一条请求即卡点"; exit 1; }
+              crane copy "${SRC}:${tag}" "${DST}:${tag}"
             fi
             # runner 能连 CCR，回读确认 tag 在 CCR 上可解析
             echo "CCR ${DST}:${tag} digest = $(crane digest "${DST}:${tag}")"
