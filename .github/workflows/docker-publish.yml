@@ -1,0 +1,76 @@
+name: Build and publish image
+
+# 构建 Dockerfile（腾讯云 AGS 自定义沙箱镜像）并推送到 GitHub Container Registry (ghcr.io)。
+# 触发方式：
+#   - 推送到 main 分支 → 打 latest + main-<sha> 标签
+#   - 推送 v* 版本标签（如 v1.0.0）→ 打语义化版本标签
+#   - 在 Actions 页手动 Run workflow（workflow_dispatch）
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # ${{ github.repository }} = Blacklake-Tech/step-analyzer；
+  # docker/metadata-action 会自动转小写（GHCR 镜像名必须小写）。
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read      # checkout
+      packages: write     # 推送到 ghcr.io
+    steps:
+      # 必须开 lfs:true，否则只会 checkout 出 AnalysisSitus.AppImage 的 LFS 指针文本。
+      - name: Checkout (with Git LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # 兜底：确认 AppImage 是真二进制（>1MB），不是 LFS 指针（指针 < 200 字节）。
+      - name: Verify LFS payload
+        run: |
+          ls -lh AnalysisSitus.AppImage
+          size=$(stat -c%s AnalysisSitus.AppImage)
+          echo "AnalysisSitus.AppImage size = $size bytes"
+          if [ "$size" -lt 1000000 ]; then
+            echo "::error::AnalysisSitus.AppImage 仍是 LFS 指针，checkout 未拉取 LFS 内容（确认 lfs:true 且 LFS 配额未耗尽）"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=main-,enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          # AppImage 与 base 镜像均为 x86_64，只构建 amd64。
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
