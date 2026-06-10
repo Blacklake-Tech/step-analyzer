@@ -72,5 +72,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # 关掉 provenance / sbom attestation：否则镜像被打成 OCI index（镜像+证明），
+          # 腾讯云 CCR 个人版无法解析，镜像搬运后 docker pull 会 not found。
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max

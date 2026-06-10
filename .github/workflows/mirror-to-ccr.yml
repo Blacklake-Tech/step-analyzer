@@ -22,6 +22,7 @@ env:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    timeout-minutes: 20   # 防止 crane 异常空转烧分钟
     permissions:
       contents: read
       packages: read    # 读 ghcr（源已公开，保留以防日后转私有）
@@ -49,6 +50,19 @@ jobs:
             tag="$(echo "$raw" | xargs)"   # 去空格
             [ -z "$tag" ] && continue
             echo "::group::copy ${tag}"
-            crane copy "${SRC}:${tag}" "${DST}:${tag}"
+            # build-push-action 默认带 provenance attestation，ghcr 上是个 OCI index
+            # （含 linux/amd64 镜像 + attestation-manifest）。腾讯云 CCR 个人版解析不了这种
+            # index/attestation，会出现 PUT 成功但 docker pull not found。
+            # 先解析出 linux/amd64 的单一镜像 manifest digest，只把它推到 CCR（扁平化）。
+            digest="$(crane digest --platform linux/amd64 "${SRC}:${tag}" 2>/dev/null || true)"
+            if [ -n "$digest" ]; then
+              echo "flatten OCI index -> ${SRC}@${digest}"
+              crane copy "${SRC}@${digest}" "${DST}:${tag}"
+            else
+              echo "source 非 index，原样复制"
+              crane copy "${SRC}:${tag}" "${DST}:${tag}"
+            fi
+            # runner 能连 CCR，回读确认 tag 在 CCR 上可解析
+            echo "CCR ${DST}:${tag} digest = $(crane digest "${DST}:${tag}")"
             echo "::endgroup::"
           done
