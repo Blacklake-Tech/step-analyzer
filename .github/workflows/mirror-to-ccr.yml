@@ -22,7 +22,7 @@ env:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 60   # 首次要跨境上传整镜像(~2.5-3GB)，给足时间
+    timeout-minutes: 360   # 首次要跨境上传整镜像(~2.5-3GB)，给足时间
     permissions:
       contents: read
       packages: read    # 读 ghcr（源已公开，保留以防日后转私有）
